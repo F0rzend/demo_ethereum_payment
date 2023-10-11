@@ -35,7 +35,7 @@ func (r *Repository) Save(invoice *domain.Invoice) {
 	r.invoices.Store(invoice.ID().String(), invoice)
 }
 
-func (r *Repository) Get(id *big.Int) (*domain.Invoice, error) {
+func (r *Repository) Get(id domain.ID) (*domain.Invoice, error) {
 	invoice, ok := r.invoices.Load(id.String())
 	if !ok {
 		return nil, fmt.Errorf("invoice with id %s not found", id)

@@ -77,6 +77,10 @@ func (e *Ethereum) ListenIncomeTransactions(invoice *domain.Invoice, callback Tr
 			log.Printf("subscription error: %s\n", err)
 			return
 		case tx := <-transactions:
+			if tx.To() != nil && tx.To().Hex() != invoice.Address().Hex() {
+				continue
+			}
+
 			if err := callback(invoice, tx); err != nil {
 				log.Printf("failed to handle transaction: %s\n", err)
 				return
