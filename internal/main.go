@@ -39,6 +39,7 @@ func run() error {
 	}
 
 	app := application.NewApplication(ethereum, repository)
+	go app.StartListeningTransactions()
 	server := delivery.NewHTTPServer(":8080", app)
 
 	log.Println("run app")

@@ -2,7 +2,6 @@ package infrastructure
 
 import (
 	"context"
-	"ethereum_payment_demo/internal/domain"
 	"fmt"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -59,9 +58,9 @@ func (e *Ethereum) generateDerivativePath(id *big.Int) accounts.DerivationPath {
 	return path
 }
 
-type TransactionHandler func(*domain.Invoice, *types.Transaction) error
+type TransactionHandler func(*types.Transaction) error
 
-func (e *Ethereum) ListenIncomeTransactions(invoice *domain.Invoice, callback TransactionHandler) {
+func (e *Ethereum) ListenIncomeTransactions(handler TransactionHandler) {
 	transactions := make(chan *types.Transaction)
 
 	// TODO: Using ctx here returns error "context canceled" after first transaction
@@ -77,14 +76,12 @@ func (e *Ethereum) ListenIncomeTransactions(invoice *domain.Invoice, callback Tr
 			log.Printf("subscription error: %s\n", err)
 			return
 		case tx := <-transactions:
-			if tx.To() != nil && tx.To().Hex() != invoice.Address().Hex() {
-				continue
-			}
-
-			if err := callback(invoice, tx); err != nil {
-				log.Printf("failed to handle transaction: %s\n", err)
-				return
-			}
+			go func(handler TransactionHandler, tx *types.Transaction) {
+				if err := handler(tx); err != nil {
+					log.Printf("failed to handle transaction: %s\n", err)
+					return
+				}
+			}(handler, tx)
 		}
 	}
 }
