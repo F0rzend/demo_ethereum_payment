@@ -1,12 +1,16 @@
 package application
 
 import (
-	"ethereum_payment_demo/internal/common"
-	"ethereum_payment_demo/internal/domain"
-	"ethereum_payment_demo/internal/infrastructure"
+	"context"
 	"fmt"
-	"github.com/ethereum/go-ethereum/core/types"
+	"log"
 	"math/big"
+
+	"github.com/ethereum/go-ethereum/core/types"
+
+	"github.com/F0rzend/demo_ethereum_payment/internal/common"
+	"github.com/F0rzend/demo_ethereum_payment/internal/domain"
+	"github.com/F0rzend/demo_ethereum_payment/internal/infrastructure"
 )
 
 type Application struct {
@@ -24,8 +28,8 @@ func NewApplication(
 	}
 }
 
-func (a *Application) StartListeningTransactions() {
-	a.ethereum.ListenIncomeTransactions(a.handleTransaction)
+func (a *Application) StartListeningTransactions(ctx context.Context) {
+	a.ethereum.ListenIncomeTransactions(ctx, a.handleTransaction)
 }
 
 func (a *Application) CreateInvoice(price domain.WEI) (domain.ID, error) {
@@ -33,7 +37,7 @@ func (a *Application) CreateInvoice(price domain.WEI) (domain.ID, error) {
 
 	invoiceAddress, err := a.ethereum.GetInvoiceAccount(id)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get invoice account: %w", err)
+		return 0, fmt.Errorf("failed to get invoice account: %w", err)
 	}
 
 	invoice := domain.NewInvoice(
@@ -49,20 +53,30 @@ func (a *Application) CreateInvoice(price domain.WEI) (domain.ID, error) {
 	return invoice.ID(), nil
 }
 
-func (a *Application) handleTransaction(tx *types.Transaction) error {
+func (a *Application) handleTransaction(ctx context.Context, tx *types.Transaction) error {
 	if tx.To() == nil {
 		return nil
 	}
 
+	value := tx.Value()
+
 	invoice, err := a.repository.GetByAddress(tx.To())
-	if common.IsFlaggedError(err, common.NotExistsFlag) {
+	if common.IsFlaggedError(err, common.FlagNotFound) {
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("cannot get invoice by address: %w", err)
 	}
 
-	value := tx.Value()
+	log.Println(tx.Hash())
+
+	_, err = a.ethereum.WaitForReceipt(ctx, tx)
+	if common.IsFlaggedError(err, common.FlagTimeout) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to wait for receipt: %w", err)
+	}
 
 	invoice.Deposit(value)
 

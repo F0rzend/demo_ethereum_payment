@@ -1,19 +1,20 @@
 package infrastructure
 
 import (
-	"ethereum_payment_demo/internal/common"
-	"ethereum_payment_demo/internal/domain"
 	"fmt"
-	eth "github.com/ethereum/go-ethereum/common"
-	"math/big"
 	"sync"
+
+	geth "github.com/ethereum/go-ethereum/common"
+
+	"github.com/F0rzend/demo_ethereum_payment/internal/common"
+	"github.com/F0rzend/demo_ethereum_payment/internal/domain"
 )
 
 type Repository struct {
 	invoices       *sync.Map
 	addressesIndex *sync.Map
 
-	lastID *big.Int
+	lastID domain.ID
 
 	mu *sync.Mutex
 }
@@ -22,45 +23,45 @@ func NewRepository() *Repository {
 	return &Repository{
 		invoices:       new(sync.Map),
 		addressesIndex: new(sync.Map),
-		lastID:         big.NewInt(0),
+		lastID:         0,
 		mu:             &sync.Mutex{},
 	}
 }
 
-func (r *Repository) GetID() *big.Int {
+func (r *Repository) GetID() domain.ID {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	r.lastID.Add(r.lastID, big.NewInt(1))
+	r.lastID++
 
 	return r.lastID
 }
 
 func (r *Repository) Save(invoice *domain.Invoice) {
-	r.invoices.Store(invoice.ID().String(), invoice)
+	r.invoices.Store(invoice.ID(), invoice)
 	r.addressesIndex.Store(invoice.Address().Hex(), invoice)
 }
 
 func (r *Repository) GetByID(id domain.ID) (*domain.Invoice, error) {
-	invoice, ok := r.invoices.Load(id.String())
+	invoice, ok := r.invoices.Load(id)
 	if !ok {
-		return nil, fmt.Errorf("invoice with id %s not found", id)
+		return nil, common.FlagError(fmt.Errorf("invoice with id %d not found", id), common.FlagNotFound)
 	}
 
 	typedInvoice, ok := invoice.(*domain.Invoice)
 	if !ok {
-		return nil, fmt.Errorf("invoice with id %s has invalid type", id)
+		return nil, fmt.Errorf("invoice with id %d has invalid type", id)
 	}
 
 	return typedInvoice, nil
 }
 
-func (r *Repository) GetByAddress(address *eth.Address) (*domain.Invoice, error) {
+func (r *Repository) GetByAddress(address *geth.Address) (*domain.Invoice, error) {
 	value, ok := r.addressesIndex.Load(address.Hex())
 	if !ok {
 		return nil, common.FlagError(
 			fmt.Errorf("invoice with address %q not found", address.Hex()),
-			common.NotExistsFlag,
+			common.FlagNotFound,
 		)
 	}
 

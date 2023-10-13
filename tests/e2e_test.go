@@ -2,10 +2,11 @@ package tests
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
 	"math/big"
 	"net/http"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/stretchr/testify/require"
 )
 
 type JSON = map[string]any
@@ -19,7 +20,7 @@ func (s *TestSuite) TestApplication() {
 			"price": transactionValue * 2,
 		}).
 		Expect().
-		Status(http.StatusOK).
+		Status(http.StatusCreated).
 		JSON().Object().
 		Value("id").Number().Raw()
 
@@ -38,7 +39,7 @@ func (s *TestSuite) TestApplication() {
 	tx, err := s.testAccount.Transfer(&invoiceAddress, big.NewInt(transactionValue))
 	require.NoError(s.T(), err)
 
-	s.T().Log(tx.Hash())
+	s.T().Logf("waiting for transaction %s", tx.Hash().Hex())
 
 	_, err = s.testAccount.WaitForReceipt(tx)
 	require.NoError(s.T(), err)
@@ -54,7 +55,7 @@ func (s *TestSuite) TestApplication() {
 	tx, err = s.testAccount.Transfer(&invoiceAddress, big.NewInt(transactionValue))
 	require.NoError(s.T(), err)
 
-	s.T().Log(tx.Hash())
+	s.T().Logf("waiting for transaction %s", tx.Hash().Hex())
 
 	_, err = s.testAccount.WaitForReceipt(tx)
 	require.NoError(s.T(), err)

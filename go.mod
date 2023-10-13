@@ -1,4 +1,4 @@
-module ethereum_payment_demo
+module github.com/F0rzend/demo_ethereum_payment
 
 go 1.21
 

@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"ethereum_payment_demo/internal/application"
-	"ethereum_payment_demo/internal/delivery"
-	"ethereum_payment_demo/internal/infrastructure"
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/F0rzend/demo_ethereum_payment/internal/application"
+	"github.com/F0rzend/demo_ethereum_payment/internal/infrastructure"
+	"github.com/F0rzend/demo_ethereum_payment/internal/transport"
 )
 
 const (
@@ -22,6 +23,8 @@ func main() {
 }
 
 func run() error {
+	ctx := context.Background()
+
 	mnemonic, ok := os.LookupEnv(MnemonicKey)
 	if !ok {
 		return fmt.Errorf("environment variable %s not set", MnemonicKey)
@@ -33,15 +36,20 @@ func run() error {
 	}
 
 	repository := infrastructure.NewRepository()
-	ethereum, err := infrastructure.NewEthereum(context.Background(), ethereumRPC, mnemonic)
+
+	ethereum, err := infrastructure.NewEthereum(ctx, ethereumRPC, mnemonic)
 	if err != nil {
 		return fmt.Errorf("cannot create ethereum gataway: %w", err)
 	}
 
 	app := application.NewApplication(ethereum, repository)
-	go app.StartListeningTransactions()
-	server := delivery.NewHTTPServer(":8080", app)
+	go app.StartListeningTransactions(ctx)
 
-	log.Println("run app")
-	return server.ListenAndServe()
+	server := transport.NewHTTPServer(":8080", app)
+
+	if err := server.ListenAndServe(); err != nil {
+		return fmt.Errorf("failed to listen and serve: %w", err)
+	}
+
+	return nil
 }

@@ -5,7 +5,8 @@ import "errors"
 type Flag string
 
 const (
-	NotExistsFlag Flag = "not exists"
+	FlagNotFound Flag = "not exists"
+	FlagTimeout  Flag = "timeout"
 )
 
 type Flagged interface {
@@ -13,20 +14,20 @@ type Flagged interface {
 	Flag() Flag
 }
 
-func FlagError(err error, flag Flag) Flagged {
-	return fault{error: err, flag: flag}
+func FlagError(err error, flag Flag) FlaggedError {
+	return FlaggedError{error: err, flag: flag}
 }
 
-type fault struct {
+type FlaggedError struct {
 	error
 	flag Flag
 }
 
-func (e fault) Unwrap() error {
+func (e FlaggedError) Unwrap() error {
 	return e.error
 }
 
-func (e fault) Flag() Flag {
+func (e FlaggedError) Flag() Flag {
 	return e.flag
 }
 

@@ -2,19 +2,31 @@ package infrastructure
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log"
+	"time"
+
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/common"
+	geth "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethclient/gethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 	hdwallet "github.com/miguelmota/go-ethereum-hdwallet"
-	"log"
-	"math/big"
+
+	"github.com/F0rzend/demo_ethereum_payment/internal/common"
+	"github.com/F0rzend/demo_ethereum_payment/internal/domain"
 )
 
+type ethereumClient struct {
+	geth *gethclient.Client
+	eth  *ethclient.Client
+}
+
 type Ethereum struct {
-	client *gethclient.Client
+	client *ethereumClient
 	wallet accounts.Wallet
 }
 
@@ -24,7 +36,10 @@ func NewEthereum(ctx context.Context, rpcURL string, walletMnemonic string) (*Et
 		return nil, fmt.Errorf("cannot dial with ethereum rpc %q: %w", rpcURL, err)
 	}
 
-	client := gethclient.New(rpcClient)
+	client := &ethereumClient{
+		geth: gethclient.New(rpcClient),
+		eth:  ethclient.NewClient(rpcClient),
+	}
 
 	wallet, err := hdwallet.NewFromMnemonic(walletMnemonic)
 	if err != nil {
@@ -37,7 +52,7 @@ func NewEthereum(ctx context.Context, rpcURL string, walletMnemonic string) (*Et
 	}, nil
 }
 
-func (e *Ethereum) GetInvoiceAccount(id *big.Int) (*common.Address, error) {
+func (e *Ethereum) GetInvoiceAccount(id domain.ID) (*geth.Address, error) {
 	path := e.generateDerivativePath(id)
 	if path.String() == accounts.DefaultRootDerivationPath.String() {
 		return nil, fmt.Errorf("you can't use default root derivation path")
@@ -51,22 +66,23 @@ func (e *Ethereum) GetInvoiceAccount(id *big.Int) (*common.Address, error) {
 	return &account.Address, nil
 }
 
-func (e *Ethereum) generateDerivativePath(id *big.Int) accounts.DerivationPath {
-	// TODO: not all id's can be converted to uint32, need to generate subpaths for big amounts of invoices
-	path := append(accounts.DefaultBaseDerivationPath, uint32(id.Uint64()))
+func (e *Ethereum) generateDerivativePath(id domain.ID) accounts.DerivationPath {
+	path := accounts.DefaultRootDerivationPath
+
+	path = append(path, id)
 
 	return path
 }
 
-type TransactionHandler func(*types.Transaction) error
+type TransactionHandler func(context.Context, *types.Transaction) error
 
-func (e *Ethereum) ListenIncomeTransactions(handler TransactionHandler) {
+func (e *Ethereum) ListenIncomeTransactions(ctx context.Context, handler TransactionHandler) {
 	transactions := make(chan *types.Transaction)
 
-	// TODO: Using ctx here returns error "context canceled" after first transaction
-	sub, err := e.client.SubscribeFullPendingTransactions(context.TODO(), transactions)
+	sub, err := e.client.geth.SubscribeFullPendingTransactions(ctx, transactions)
 	if err != nil {
 		log.Printf("failed to subscribe to logs: %s\n", err)
+
 		return
 	}
 
@@ -74,14 +90,45 @@ func (e *Ethereum) ListenIncomeTransactions(handler TransactionHandler) {
 		select {
 		case err := <-sub.Err():
 			log.Printf("subscription error: %s\n", err)
+
 			return
 		case tx := <-transactions:
-			go func(handler TransactionHandler, tx *types.Transaction) {
-				if err := handler(tx); err != nil {
+			go func(ctx context.Context, handler TransactionHandler, tx *types.Transaction) {
+				if err := handler(ctx, tx); err != nil {
 					log.Printf("failed to handle transaction: %s\n", err)
+
 					return
 				}
-			}(handler, tx)
+			}(ctx, handler, tx)
+		}
+	}
+}
+
+const (
+	waitTimeout = 5 * time.Minute
+	waitDelay   = 500 * time.Millisecond
+)
+
+func (e *Ethereum) WaitForReceipt(ctx context.Context, tx *types.Transaction) (*types.Receipt, error) {
+	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(waitDelay)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, common.FlagError(fmt.Errorf("timeout exceeded"), common.FlagTimeout)
+		case <-ticker.C:
+			receipt, err := e.client.eth.TransactionReceipt(ctx, tx.Hash())
+			if err != nil && !errors.Is(err, ethereum.NotFound) {
+				return nil, fmt.Errorf("failed to get receipt: %w", err)
+			}
+
+			if receipt != nil {
+				return receipt, nil
+			}
 		}
 	}
 }

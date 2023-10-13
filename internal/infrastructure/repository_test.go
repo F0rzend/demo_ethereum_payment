@@ -1,4 +1,4 @@
-package infrastructure
+package infrastructure_test
 
 import (
 	"math/big"
@@ -6,13 +6,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/F0rzend/demo_ethereum_payment/internal/infrastructure"
 )
 
 func TestRepository_GetID(t *testing.T) {
 	t.Parallel()
 
 	const callTimes = 1_000_000
-	sut := NewRepository()
+	sut := infrastructure.NewRepository()
 
 	callParallelAndWait(callTimes-1, func() {
 		sut.GetID()

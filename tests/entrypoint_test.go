@@ -6,7 +6,6 @@ import (
 
 	"github.com/gavv/httpexpect"
 	"github.com/stretchr/testify/require"
-
 	"github.com/stretchr/testify/suite"
 )
 
@@ -29,6 +28,8 @@ func (s *TestSuite) SetupSuite() {
 	}
 	s.testAccount = app.testAccount
 	s.tearDownSuite = func(t *testing.T) {
+		t.Helper()
+
 		if err := app.close(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -40,5 +41,7 @@ func (s *TestSuite) TearDownSuite() {
 }
 
 func TestApplication(t *testing.T) {
+	t.Parallel()
+
 	suite.Run(t, new(TestSuite))
 }

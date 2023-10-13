@@ -5,14 +5,20 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"log"
-	"math/big"
-	"time"
+)
+
+const (
+	LowGasPriceCoefficient      = 1
+	MarketGasFeeCoefficient     = 1.25
+	AggressiveGasFeeCoefficient = 1.5
 )
 
 type Account struct {
@@ -24,9 +30,7 @@ type Account struct {
 	chainID *big.Int
 }
 
-func NewAccount(rpcURL string, rawPrivate string) (*Account, error) {
-	ctx := context.Background()
-
+func NewAccount(ctx context.Context, rpcURL string, rawPrivate string) (*Account, error) {
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to ethereum node: %w", err)
@@ -72,9 +76,7 @@ func (a *Account) Transfer(to *common.Address, value *big.Int) (*types.Transacti
 		return nil, fmt.Errorf("failed to get suggested gas price: %w", err)
 	}
 
-	log.Println("suggested gas price:", suggestedGasPrice)
-
-	gasPrice := getOptimalGasPrice(suggestedGasPrice)
+	gasPrice := getOptimalGasPrice(suggestedGasPrice, MarketGasFeeCoefficient)
 
 	tx := types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
@@ -98,13 +100,17 @@ func (a *Account) Transfer(to *common.Address, value *big.Int) (*types.Transacti
 	return signedTx, nil
 }
 
-// getOptimalGasPrice returns gas price that is 25% higher than suggested.
-func getOptimalGasPrice(suggested *big.Int) *big.Int {
-	return big.NewInt(0).Add(
-		suggested,
-		big.NewInt(0).Div(suggested, big.NewInt(4)),
-	)
+func getOptimalGasPrice(suggested *big.Int, coefficient float64) *big.Int {
+	value := big.NewFloat(0).SetInt(suggested)
+
+	result, _ := value.
+		Mul(value, big.NewFloat(coefficient)).
+		Int(nil)
+
+	return result
 }
+
+const waitDelay = 500 * time.Millisecond
 
 func (a *Account) WaitForReceipt(tx *types.Transaction) (*types.Receipt, error) {
 	ctx := context.Background()
@@ -119,6 +125,6 @@ func (a *Account) WaitForReceipt(tx *types.Transaction) (*types.Receipt, error) 
 			return receipt, nil
 		}
 
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(waitDelay)
 	}
 }

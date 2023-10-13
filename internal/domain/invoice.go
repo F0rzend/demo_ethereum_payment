@@ -1,8 +1,9 @@
 package domain
 
 import (
-	geth "github.com/ethereum/go-ethereum/common"
 	"math/big"
+
+	geth "github.com/ethereum/go-ethereum/common"
 )
 
 type Invoice struct {
@@ -13,9 +14,11 @@ type Invoice struct {
 	status  InvoiceStatus
 }
 
-type ID = *big.Int
-type WEI = *big.Int
-type Address = *geth.Address
+type (
+	ID      = uint32
+	WEI     = *big.Int
+	Address = *geth.Address
+)
 
 type InvoiceStatus string
 
@@ -62,6 +65,7 @@ func (i *Invoice) Status() InvoiceStatus {
 
 func (i *Invoice) Deposit(amount WEI) {
 	i.balance.Add(i.balance, amount)
+
 	if i.balance.Cmp(i.price) >= 0 {
 		i.status = InvoiceStatusPaid
 	}
