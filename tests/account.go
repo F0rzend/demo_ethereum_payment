@@ -107,11 +107,6 @@ func getOptimalGasPrice(ctx context.Context, client *ethclient.Client) (*big.Int
 		return nil, fmt.Errorf("failed to get priotiry fee: %w", err)
 	}
 
-	//maxFeePerGas := big.NewInt(0).Add(
-	//	maxPriorityFeePerGas,
-	//	baseFee.Mul(baseFee, big.NewInt(priorityCoefficient)),
-	//)
-
 	maxFeePerGas, _ := big.NewFloat(0).Add(
 		big.NewFloat(0).SetInt(maxPriorityFeePerGas),
 		big.NewFloat(0).Mul(big.NewFloat(0).SetInt(baseFee), big.NewFloat(priorityCoefficient)),
