@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -12,6 +13,8 @@ import (
 type JSON = map[string]any
 
 func (s *TestSuite) TestApplication() {
+	ctx := context.Background()
+
 	const transactionValue = 1
 
 	invoiceID := s.e().
@@ -39,10 +42,13 @@ func (s *TestSuite) TestApplication() {
 	tx, err := s.testAccount.Transfer(&invoiceAddress, big.NewInt(transactionValue))
 	require.NoError(s.T(), err)
 
+	s.T().Logf("transaction #%d gas price: %s", tx.Nonce(), tx.GasPrice().String())
+
 	s.T().Logf("waiting for transaction %s", tx.Hash().Hex())
 
-	_, err = s.testAccount.WaitForReceipt(tx)
+	receipt, err := s.testAccount.WaitForReceipt(ctx, tx)
 	require.NoError(s.T(), err)
+	require.NotNil(s.T(), receipt)
 
 	invoice = s.e().
 		GET(invoicePath).
@@ -57,8 +63,9 @@ func (s *TestSuite) TestApplication() {
 
 	s.T().Logf("waiting for transaction %s", tx.Hash().Hex())
 
-	_, err = s.testAccount.WaitForReceipt(tx)
+	receipt, err = s.testAccount.WaitForReceipt(ctx, tx)
 	require.NoError(s.T(), err)
+	require.NotNil(s.T(), receipt)
 
 	invoice = s.e().
 		GET(invoicePath).

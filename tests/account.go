@@ -15,12 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-const (
-	LowGasPriceCoefficient      = 1
-	MarketGasFeeCoefficient     = 1.25
-	AggressiveGasFeeCoefficient = 1.5
-)
-
 type Account struct {
 	address common.Address
 	private *ecdsa.PrivateKey
@@ -71,12 +65,10 @@ func (a *Account) Transfer(to *common.Address, value *big.Int) (*types.Transacti
 		return nil, fmt.Errorf("failed to get nonce: %w", err)
 	}
 
-	suggestedGasPrice, err := a.client.SuggestGasPrice(ctx)
+	gasPrice, err := getOptimalGasPrice(ctx, a.client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get suggested gas price: %w", err)
+		return nil, fmt.Errorf("failed to calculate gas price: %w", err)
 	}
-
-	gasPrice := getOptimalGasPrice(suggestedGasPrice, MarketGasFeeCoefficient)
 
 	tx := types.NewTx(&types.LegacyTx{
 		Nonce:    nonce,
@@ -100,31 +92,66 @@ func (a *Account) Transfer(to *common.Address, value *big.Int) (*types.Transacti
 	return signedTx, nil
 }
 
-func getOptimalGasPrice(suggested *big.Int, coefficient float64) *big.Int {
-	value := big.NewFloat(0).SetInt(suggested)
+const priorityCoefficient = 1.25
 
-	result, _ := value.
-		Mul(value, big.NewFloat(coefficient)).
-		Int(nil)
+func getOptimalGasPrice(ctx context.Context, client *ethclient.Client) (*big.Int, error) {
+	lastBlockHeader, err := client.HeaderByNumber(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest block header: %w", err)
+	}
 
-	return result
+	baseFee := lastBlockHeader.BaseFee
+
+	maxPriorityFeePerGas, err := client.SuggestGasTipCap(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get priotiry fee: %w", err)
+	}
+
+	//maxFeePerGas := big.NewInt(0).Add(
+	//	maxPriorityFeePerGas,
+	//	baseFee.Mul(baseFee, big.NewInt(priorityCoefficient)),
+	//)
+
+	maxFeePerGas, _ := big.NewFloat(0).Add(
+		big.NewFloat(0).SetInt(maxPriorityFeePerGas),
+		big.NewFloat(0).Mul(big.NewFloat(0).SetInt(baseFee), big.NewFloat(priorityCoefficient)),
+	).Int(nil)
+
+	return maxFeePerGas, nil
 }
 
-const waitDelay = 500 * time.Millisecond
+const (
+	blockDelay  = 12 * time.Second
+	waitTimeout = blockDelay * 10
+	waitDelay   = 500 * time.Millisecond
+)
 
-func (a *Account) WaitForReceipt(tx *types.Transaction) (*types.Receipt, error) {
-	ctx := context.Background()
+func (a *Account) WaitForReceipt(ctx context.Context, tx *types.Transaction) (*types.Receipt, error) {
+	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(waitDelay)
+	defer ticker.Stop()
 
 	for {
-		receipt, err := a.client.TransactionReceipt(ctx, tx.Hash())
-		if err != nil && !errors.Is(err, ethereum.NotFound) {
-			return nil, fmt.Errorf("failed to get receipt: %w", err)
-		}
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf(
+				"transaction №%d %s stuck",
+				tx.Nonce(),
+				tx.Hash().Hex(),
+			)
+		case <-ticker.C:
+			receipt, err := a.client.TransactionReceipt(ctx, tx.Hash())
+			if err != nil && !errors.Is(err, ethereum.NotFound) {
+				return nil, fmt.Errorf("failed to get receipt: %w", err)
+			}
 
-		if receipt != nil {
+			if receipt == nil {
+				continue
+			}
+
 			return receipt, nil
 		}
-
-		time.Sleep(waitDelay)
 	}
 }
