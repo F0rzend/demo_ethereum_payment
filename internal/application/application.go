@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/core/types"
@@ -28,8 +27,13 @@ func NewApplication(
 	}
 }
 
-func (a *Application) StartListeningTransactions(ctx context.Context) {
-	a.ethereum.ListenIncomeTransactions(ctx, a.handleTransaction)
+func (a *Application) StartListeningTransactions(ctx context.Context) error {
+	err := a.ethereum.ListenConfirmedTransactions(ctx, a.handleTransaction)
+	if err != nil {
+		return fmt.Errorf("failed to listen confirmed transactions: %w", err)
+	}
+
+	return nil
 }
 
 func (a *Application) CreateInvoice(price domain.WEI) (domain.ID, error) {
@@ -53,7 +57,7 @@ func (a *Application) CreateInvoice(price domain.WEI) (domain.ID, error) {
 	return invoice.ID(), nil
 }
 
-func (a *Application) handleTransaction(ctx context.Context, tx *types.Transaction) error {
+func (a *Application) handleTransaction(tx *types.Transaction) error {
 	if tx.To() == nil {
 		return nil
 	}
@@ -66,16 +70,6 @@ func (a *Application) handleTransaction(ctx context.Context, tx *types.Transacti
 	}
 	if err != nil {
 		return fmt.Errorf("cannot get invoice by address: %w", err)
-	}
-
-	log.Println(tx.Hash())
-
-	_, err = a.ethereum.WaitForReceipt(ctx, tx)
-	if common.IsFlaggedError(err, common.FlagTimeout) {
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("failed to wait for receipt: %w", err)
 	}
 
 	invoice.Deposit(value)

@@ -1,10 +1,7 @@
 package transport
 
 import (
-	"fmt"
-	"log"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -13,39 +10,19 @@ import (
 	"github.com/F0rzend/demo_ethereum_payment/internal/application"
 )
 
-const ReadHeaderTimeout = 5 * time.Second
-
-type HTTPServer struct {
-	address     string
+type HTTPHandlers struct {
 	application *application.Application
 }
 
-func NewHTTPServer(
-	address string,
+func NewHTTPHandlers(
 	application *application.Application,
-) *HTTPServer {
-	return &HTTPServer{
-		address:     address,
+) *HTTPHandlers {
+	return &HTTPHandlers{
 		application: application,
 	}
 }
 
-func (s *HTTPServer) ListenAndServe() error {
-	server := &http.Server{
-		Addr:              s.address,
-		ReadHeaderTimeout: ReadHeaderTimeout,
-		Handler:           s.getHandler(),
-	}
-
-	log.Println("run app")
-	if err := server.ListenAndServe(); err != nil {
-		return fmt.Errorf("failed to listen and serve: %w", err)
-	}
-
-	return nil
-}
-
-func (s *HTTPServer) getHandler() http.Handler {
+func (s *HTTPHandlers) GetRouter() http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(

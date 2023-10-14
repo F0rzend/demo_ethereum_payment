@@ -103,7 +103,7 @@ func getGenericContainerRequest(testRPCUrl, appMnemonic string) testcontainers.G
 				"ETHEREUM_RPC": testRPCUrl,
 				"MNEMONIC":     appMnemonic,
 			},
-			WaitingFor: wait.ForLog("run app"),
+			WaitingFor: wait.ForLog("server started"),
 			Name:       ContainerName,
 		},
 		Started: true,

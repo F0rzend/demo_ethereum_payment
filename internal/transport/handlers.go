@@ -12,7 +12,7 @@ import (
 	"github.com/F0rzend/demo_ethereum_payment/internal/domain"
 )
 
-func (s *HTTPServer) createInvoice(w http.ResponseWriter, r *http.Request) error {
+func (s *HTTPHandlers) createInvoice(w http.ResponseWriter, r *http.Request) error {
 	type request struct {
 		Price domain.WEI `json:"price"`
 	}
@@ -47,7 +47,7 @@ const (
 	InvoiceIDBitSize      = 32
 )
 
-func (s *HTTPServer) getInvoice(w http.ResponseWriter, r *http.Request) error {
+func (s *HTTPHandlers) getInvoice(w http.ResponseWriter, r *http.Request) error {
 	rawID := chi.URLParam(r, "id")
 	id, err := strconv.ParseUint(rawID, InvoiceIDNumberSystem, InvoiceIDBitSize)
 	if err != nil {

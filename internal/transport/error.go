@@ -16,7 +16,7 @@ type ErrorType string
 
 const (
 	InternalServerErrorType ErrorType = "InternalServerError"
-	ValueErrorType          ErrorType = "ValueError"
+	ValidationErrorType     ErrorType = "ValidationError"
 	NotFoundErrorType       ErrorType = "NotFoundError"
 )
 
@@ -114,7 +114,7 @@ type rendererError interface {
 
 func NewValidationError(detail string) error {
 	return &HTTPError{
-		Type:   ValueErrorType,
+		Type:   ValidationErrorType,
 		Status: http.StatusBadRequest,
 		Detail: detail,
 	}

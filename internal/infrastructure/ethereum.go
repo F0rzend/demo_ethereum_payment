@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -74,32 +75,45 @@ func (e *Ethereum) generateDerivativePath(id domain.ID) accounts.DerivationPath 
 	return path
 }
 
-type TransactionHandler func(context.Context, *types.Transaction) error
+type TransactionHandler func(*types.Transaction) error
 
-func (e *Ethereum) ListenIncomeTransactions(ctx context.Context, handler TransactionHandler) {
-	transactions := make(chan *types.Transaction)
+func (e *Ethereum) ListenConfirmedTransactions(ctx context.Context, handler TransactionHandler) error {
+	headers := make(chan *types.Header)
 
-	sub, err := e.client.geth.SubscribeFullPendingTransactions(ctx, transactions)
+	sub, err := e.client.eth.SubscribeNewHead(ctx, headers)
 	if err != nil {
-		log.Printf("failed to subscribe to logs: %s\n", err)
-
-		return
+		return fmt.Errorf("failed to subscribe to headers: %w", err)
 	}
+
+	wg := new(sync.WaitGroup)
+	defer wg.Wait()
 
 	for {
 		select {
+		case <-ctx.Done():
+			sub.Unsubscribe()
+			log.Println("unsubscribed from headers")
+
+			return nil
 		case err := <-sub.Err():
-			log.Printf("subscription error: %s\n", err)
+			return fmt.Errorf("subscription error: %w", err)
+		case header := <-headers:
+			block, err := e.client.eth.BlockByHash(ctx, header.Hash())
+			if err != nil {
+				log.Printf("failed to get block by hash %s: %s\n", header.Hash(), err)
 
-			return
-		case tx := <-transactions:
-			go func(ctx context.Context, handler TransactionHandler, tx *types.Transaction) {
-				if err := handler(ctx, tx); err != nil {
-					log.Printf("failed to handle transaction: %s\n", err)
+				continue
+			}
 
-					return
-				}
-			}(ctx, handler, tx)
+			wg.Add(len(block.Transactions()))
+			for _, tx := range block.Transactions() {
+				go func(tx *types.Transaction) {
+					if err := handler(tx); err != nil {
+						log.Printf("failed to handle transaction %s: %s\n", tx.Hash().Hex(), err)
+					}
+					wg.Done()
+				}(tx)
+			}
 		}
 	}
 }
