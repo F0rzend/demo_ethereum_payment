@@ -8,27 +8,26 @@ import (
 
 func (s *TestSuite) TestApplication() {
 	ctx := context.Background()
-	t := s.T()
 
 	const transactionValue = 1
 
-	invoiceID := createInvoice(t, s.e(), transactionValue*2)
+	invoiceID := createInvoice(s.T(), s.e(), transactionValue*2)
 
-	invoice := getInvoice(t, s.e(), invoiceID)
+	invoice := getInvoice(s.T(), s.e(), invoiceID)
 	invoice.Status.Equal(InvoiceStatusPending)
 
 	tx := invoice.Deposit(s.eth, transactionValue)
 	tx.WaitConfirmation(ctx, s.eth)
-	waitForProcessing(t)
+	waitForProcessing(s.T())
 
-	invoice = getInvoice(t, s.e(), invoiceID)
+	invoice = getInvoice(s.T(), s.e(), invoiceID)
 	invoice.Status.Equal(InvoiceStatusPaid)
 
 	tx = invoice.Deposit(s.eth, transactionValue)
 	tx.WaitConfirmation(ctx, s.eth)
-	waitForProcessing(t)
+	waitForProcessing(s.T())
 
-	invoice = getInvoice(t, s.e(), invoiceID)
+	invoice = getInvoice(s.T(), s.e(), invoiceID)
 	invoice.Status.Equal(InvoiceStatusPaid)
 }
 
