@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"sync"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	geth "github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -61,55 +61,54 @@ func (e *Ethereum) generateDerivativePath(id domain.ID) accounts.DerivationPath 
 
 type TransactionHandler func(*types.Transaction) error
 
-func (e *Ethereum) ListenConfirmedTransactions(ctx context.Context, handler TransactionHandler) error {
+func (e *Ethereum) SubscribeConfirmedTransactions(ctx context.Context) (<-chan *types.Transaction, error) {
 	headers := make(chan *types.Header)
 
 	sub, err := e.client.SubscribeNewHead(ctx, headers)
 	if err != nil {
-		return fmt.Errorf("failed to subscribe to headers: %w", err)
+		return nil, fmt.Errorf("failed to subscribe to headers: %w", err)
 	}
 
-	wg := new(sync.WaitGroup)
-	defer wg.Wait()
+	transactions := make(chan *types.Transaction)
+
+	go e.listenHeaders(ctx, headers, sub, transactions)
+
+	return transactions, nil
+}
+
+func (e *Ethereum) listenHeaders(
+	ctx context.Context,
+	headers <-chan *types.Header,
+	headersSubscription ethereum.Subscription,
+	transactions chan<- *types.Transaction,
+) {
+	defer close(transactions)
 
 	for {
 		select {
 		case <-ctx.Done():
-			sub.Unsubscribe()
+			headersSubscription.Unsubscribe()
 			log.Println("unsubscribed from headers")
 
-			return nil
-		case err := <-sub.Err():
-			return fmt.Errorf("subscription error: %w", err)
+			return
+		case err := <-headersSubscription.Err():
+			log.Printf("subscription error: %s\n", err)
+
+			return
 		case header := <-headers:
-			if err := e.processHeader(ctx, wg, header, handler); err != nil {
-				return fmt.Errorf("failed to process header: %w", err)
+			block, err := e.client.BlockByHash(ctx, header.Hash())
+			if err != nil {
+				log.Printf("failed to get block by hash %s: %s\n", header.Hash(), err)
+
+				continue
+			}
+
+			blockTransactions := block.Transactions()
+
+			log.Printf("new block received with %d transactions\n", len(blockTransactions))
+			for _, tx := range blockTransactions {
+				transactions <- tx
 			}
 		}
 	}
-}
-
-func (e *Ethereum) processHeader(
-	ctx context.Context,
-	handlersWaitGroup *sync.WaitGroup,
-	header *types.Header,
-	handler TransactionHandler,
-) error {
-	block, err := e.client.BlockByHash(ctx, header.Hash())
-	if err != nil {
-		return fmt.Errorf("failed to get block by hash %s: %w", header.Hash(), err)
-	}
-
-	handlersWaitGroup.Add(len(block.Transactions()))
-	for _, tx := range block.Transactions() {
-		go func(tx *types.Transaction) {
-			defer handlersWaitGroup.Done()
-
-			if err := handler(tx); err != nil {
-				log.Printf("failed to handle transaction %s: %s\n", tx.Hash().Hex(), err)
-			}
-		}(tx)
-	}
-
-	return nil
 }

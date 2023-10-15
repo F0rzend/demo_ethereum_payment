@@ -43,9 +43,12 @@ func run() error {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	g.Go(app.RunTransactionListener(ctx))
 	g.Go(server.Run)
-	g.Go(server.ShutdownOnContextDone(ctx))
+
+	ctx, shutdownFn := server.ShutdownOnContextDone(ctx)
+	g.Go(shutdownFn)
+
+	g.Go(app.RunTransactionHandler(ctx))
 
 	if err := g.Wait(); err != nil {
 		return fmt.Errorf("an unexpected error occurred while the application was running: %w", err)

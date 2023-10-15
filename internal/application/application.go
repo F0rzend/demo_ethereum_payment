@@ -3,7 +3,9 @@ package application
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/big"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/core/types"
 
@@ -27,11 +29,29 @@ func NewApplication(
 	}
 }
 
-func (a *Application) RunTransactionListener(ctx context.Context) common.ErrorGroupGoroutine {
+func (a *Application) RunTransactionHandler(ctx context.Context) common.ErrorGroupGoroutine {
 	return func() error {
-		if err := a.ethereum.ListenConfirmedTransactions(ctx, a.handleTransaction); err != nil {
-			return fmt.Errorf("failed to start listening transactions: %w", err)
+		transactions, err := a.ethereum.SubscribeConfirmedTransactions(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to confirmed transactions: %w", err)
 		}
+
+		log.Println("start handling new confirmed transactions")
+		wg := new(sync.WaitGroup)
+		for tx := range transactions {
+			wg.Add(1)
+			go func(tx *types.Transaction) {
+				defer wg.Done()
+
+				if err := a.handleTransaction(tx); err != nil {
+					log.Printf("failed to handle transaction: %s\n", err)
+				}
+			}(tx)
+		}
+
+		wg.Wait()
+
+		log.Println("handling new confirmed transactions stopped")
 
 		return nil
 	}

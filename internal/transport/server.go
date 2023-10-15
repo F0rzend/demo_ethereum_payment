@@ -50,14 +50,19 @@ func (s *HTTPServer) Run() error {
 	return nil
 }
 
-func (s *HTTPServer) ShutdownOnContextDone(ctx context.Context) common.ErrorGroupGoroutine {
-	return func() error {
-		<-ctx.Done()
+func (s *HTTPServer) ShutdownOnContextDone(
+	signalContext context.Context,
+) (context.Context, common.ErrorGroupGoroutine) {
+	shutdownContext, cancel := context.WithCancel(context.Background())
 
-		ctx, cancel := context.WithTimeout(context.Background(), ServerShutdownTimeout)
+	return shutdownContext, func() error {
 		defer cancel()
 
-		//nolint:contextcheck
+		<-signalContext.Done()
+
+		ctx, cancel := context.WithTimeout(shutdownContext, ServerShutdownTimeout)
+		defer cancel()
+
 		if err := s.server.Shutdown(ctx); err != nil {
 			return fmt.Errorf("failed to shutdown server: %w", err)
 		}
