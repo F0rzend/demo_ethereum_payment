@@ -2,74 +2,41 @@ package tests
 
 import (
 	"context"
-	"fmt"
-	"math/big"
-	"net/http"
-
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/stretchr/testify/require"
+	"testing"
+	"time"
 )
-
-type JSON = map[string]any
 
 func (s *TestSuite) TestApplication() {
 	ctx := context.Background()
+	t := s.T()
 
 	const transactionValue = 1
 
-	invoiceID := s.e().
-		POST("/invoices").
-		WithJSON(JSON{
-			"price": transactionValue * 2,
-		}).
-		Expect().
-		Status(http.StatusCreated).
-		JSON().Object().
-		Value("id").Number().Raw()
+	invoiceID := createInvoice(t, s.e(), transactionValue*2)
 
-	invoicePath := fmt.Sprintf("/invoices/%d", int(invoiceID))
-	invoice := s.e().
-		GET(invoicePath).
-		Expect().
-		Status(http.StatusOK).
-		JSON().Object()
+	invoice := getInvoice(t, s.e(), invoiceID)
+	invoice.Status.Equal(InvoiceStatusPending)
 
-	invoice.Value("status").String().Equal("pending")
+	tx := invoice.Deposit(s.eth, transactionValue)
+	tx.WaitConfirmation(ctx, s.eth)
+	waitForProcessing(t)
 
-	invoiceAddressHex := invoice.Value("address").String().Raw()
-	invoiceAddress := common.HexToAddress(invoiceAddressHex)
+	invoice = getInvoice(t, s.e(), invoiceID)
+	invoice.Status.Equal(InvoiceStatusPaid)
 
-	tx, err := s.testAccount.Transfer(&invoiceAddress, big.NewInt(transactionValue))
-	require.NoError(s.T(), err)
+	tx = invoice.Deposit(s.eth, transactionValue)
+	tx.WaitConfirmation(ctx, s.eth)
+	waitForProcessing(t)
 
-	s.T().Logf("waiting for transaction %s", tx.Hash().Hex())
+	invoice = getInvoice(t, s.e(), invoiceID)
+	invoice.Status.Equal(InvoiceStatusPaid)
+}
 
-	receipt, err := s.testAccount.WaitForReceipt(ctx, tx)
-	require.NoError(s.T(), err)
-	require.NotNil(s.T(), receipt)
+const transactionProcessingTime = 3 * time.Second
 
-	invoice = s.e().
-		GET(invoicePath).
-		Expect().
-		Status(http.StatusOK).
-		JSON().Object()
+func waitForProcessing(t *testing.T) {
+	t.Helper()
 
-	invoice.Value("status").String().Equal("pending")
-
-	tx, err = s.testAccount.Transfer(&invoiceAddress, big.NewInt(transactionValue))
-	require.NoError(s.T(), err)
-
-	s.T().Logf("waiting for transaction %s", tx.Hash().Hex())
-
-	receipt, err = s.testAccount.WaitForReceipt(ctx, tx)
-	require.NoError(s.T(), err)
-	require.NotNil(s.T(), receipt)
-
-	invoice = s.e().
-		GET(invoicePath).
-		Expect().
-		Status(http.StatusOK).
-		JSON().Object()
-
-	invoice.Value("status").String().Equal("paid")
+	t.Logf("let the transaction be processed for %s", transactionProcessingTime)
+	time.Sleep(transactionProcessingTime)
 }

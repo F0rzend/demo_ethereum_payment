@@ -13,7 +13,7 @@ type TestSuite struct {
 	suite.Suite
 
 	e             func() *httpexpect.Expect
-	testAccount   *Account
+	eth           *EthereumGateway
 	tearDownSuite func(*testing.T)
 }
 
@@ -26,7 +26,7 @@ func (s *TestSuite) SetupSuite() {
 	s.e = func() *httpexpect.Expect {
 		return httpexpect.New(s.T(), app.URI)
 	}
-	s.testAccount = app.testAccount
+	s.eth = app.testAccount
 	s.tearDownSuite = func(t *testing.T) {
 		t.Helper()
 

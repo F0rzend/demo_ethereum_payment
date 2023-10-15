@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-type Account struct {
+type EthereumGateway struct {
 	address common.Address
 	private *ecdsa.PrivateKey
 	public  *ecdsa.PublicKey
@@ -24,7 +24,7 @@ type Account struct {
 	chainID *big.Int
 }
 
-func NewAccount(ctx context.Context, rpcURL string, rawPrivate string) (*Account, error) {
+func NewEthereumGateway(ctx context.Context, rpcURL string, rawPrivate string) (*EthereumGateway, error) {
 	client, err := ethclient.Dial(rpcURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to ethereum node: %w", err)
@@ -48,7 +48,7 @@ func NewAccount(ctx context.Context, rpcURL string, rawPrivate string) (*Account
 
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	return &Account{
+	return &EthereumGateway{
 		address: address,
 		private: privateKey,
 		public:  publicKeyECDSA,
@@ -57,7 +57,7 @@ func NewAccount(ctx context.Context, rpcURL string, rawPrivate string) (*Account
 	}, nil
 }
 
-func (a *Account) Transfer(to *common.Address, value *big.Int) (*types.Transaction, error) {
+func (a *EthereumGateway) Transfer(to *common.Address, value *big.Int) (*types.Transaction, error) {
 	ctx := context.Background()
 
 	nonce, err := a.client.PendingNonceAt(ctx, a.address)
@@ -121,7 +121,7 @@ const (
 	waitDelay   = 500 * time.Millisecond
 )
 
-func (a *Account) WaitForReceipt(ctx context.Context, tx *types.Transaction) (*types.Receipt, error) {
+func (a *EthereumGateway) WaitForReceipt(ctx context.Context, tx *types.Transaction) (*types.Receipt, error) {
 	ctx, cancel := context.WithTimeout(ctx, waitTimeout)
 	defer cancel()
 
