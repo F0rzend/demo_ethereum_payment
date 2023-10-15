@@ -25,8 +25,9 @@ func TestRepository_GetID(t *testing.T) {
 }
 
 func callParallelAndWait(times int, f func()) {
-	wg := &sync.WaitGroup{}
+	wg := new(sync.WaitGroup)
 	wg.Add(times)
+
 	for i := 0; i < times; i++ {
 		go func() {
 			defer wg.Done()
@@ -34,5 +35,6 @@ func callParallelAndWait(times int, f func()) {
 			f()
 		}()
 	}
+
 	wg.Wait()
 }

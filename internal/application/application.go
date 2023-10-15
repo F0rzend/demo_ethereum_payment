@@ -27,13 +27,14 @@ func NewApplication(
 	}
 }
 
-func (a *Application) StartListeningTransactions(ctx context.Context) error {
-	err := a.ethereum.ListenConfirmedTransactions(ctx, a.handleTransaction)
-	if err != nil {
-		return fmt.Errorf("failed to listen confirmed transactions: %w", err)
-	}
+func (a *Application) RunTransactionListener(ctx context.Context) common.ErrorGroupGoroutine {
+	return func() error {
+		if err := a.ethereum.ListenConfirmedTransactions(ctx, a.handleTransaction); err != nil {
+			return fmt.Errorf("failed to start listening transactions: %w", err)
+		}
 
-	return nil
+		return nil
+	}
 }
 
 func (a *Application) CreateInvoice(price domain.WEI) (domain.ID, error) {

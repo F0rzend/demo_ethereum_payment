@@ -6,7 +6,6 @@ type Flag string
 
 const (
 	FlagNotFound Flag = "not exists"
-	FlagTimeout  Flag = "timeout"
 )
 
 type Flagged interface {

@@ -1,38 +1,69 @@
 package transport
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"net"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
+	"time"
 
 	"github.com/F0rzend/demo_ethereum_payment/internal/application"
+	"github.com/F0rzend/demo_ethereum_payment/internal/common"
 )
 
-type HTTPHandlers struct {
-	application *application.Application
+const (
+	ReadHeaderTimeout     = 5 * time.Second
+	ServerShutdownTimeout = 60 * time.Second
+)
+
+type HTTPServer struct {
+	server *http.Server
 }
 
-func NewHTTPHandlers(
-	application *application.Application,
-) *HTTPHandlers {
-	return &HTTPHandlers{
-		application: application,
+func NewHTTPServer(ctx context.Context, address string, app *application.Application) *HTTPServer {
+	handlers := NewHTTPHandlers(app)
+
+	server := &http.Server{
+		Addr:              address,
+		ReadHeaderTimeout: ReadHeaderTimeout,
+		Handler:           handlers.GetRouter(),
+		BaseContext: func(_ net.Listener) context.Context {
+			return ctx
+		},
+	}
+
+	return &HTTPServer{
+		server: server,
 	}
 }
 
-func (s *HTTPHandlers) GetRouter() http.Handler {
-	r := chi.NewRouter()
+func (s *HTTPServer) Run() error {
+	log.Println("server started")
 
-	r.Use(
-		middleware.Recoverer,
-		middleware.AllowContentType("application/json"),
-		render.SetContentType(render.ContentTypeJSON),
-	)
+	err := s.server.ListenAndServe()
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return fmt.Errorf("failed to start listening and serving: %w", err)
+	}
 
-	r.Post("/invoices", ErrorHandler(s.createInvoice))
-	r.Get("/invoices/{id}", ErrorHandler(s.getInvoice))
+	return nil
+}
 
-	return r
+func (s *HTTPServer) ShutdownOnContextDone(ctx context.Context) common.ErrorGroupGoroutine {
+	return func() error {
+		<-ctx.Done()
+
+		ctx, cancel := context.WithTimeout(context.Background(), ServerShutdownTimeout)
+		defer cancel()
+
+		//nolint:contextcheck
+		if err := s.server.Shutdown(ctx); err != nil {
+			return fmt.Errorf("failed to shutdown server: %w", err)
+		}
+
+		log.Println("server stopped")
+
+		return nil
+	}
 }
