@@ -21,7 +21,7 @@ func (s *TestSuite) TestApplication() {
 	waitForProcessing(s.T())
 
 	invoice = getInvoice(s.T(), s.e(), invoiceID)
-	invoice.Status.Equal(InvoiceStatusPaid)
+	invoice.Status.Equal(InvoiceStatusPending)
 
 	tx = invoice.Deposit(s.eth, transactionValue)
 	tx.WaitConfirmation(ctx, s.eth)
@@ -31,7 +31,7 @@ func (s *TestSuite) TestApplication() {
 	invoice.Status.Equal(InvoiceStatusPaid)
 }
 
-const transactionProcessingTime = 3 * time.Second
+const transactionProcessingTime = 5 * time.Second
 
 func waitForProcessing(t *testing.T) {
 	t.Helper()

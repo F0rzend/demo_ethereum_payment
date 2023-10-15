@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http"
@@ -40,7 +39,7 @@ func (i *TestInvoice) Deposit(from *EthereumGateway, value uint64) *TestTransact
 	tx, err := from.Transfer(&invoiceAddress, big.NewInt(int64(value)))
 	require.NoError(i.t, err)
 
-	i.t.Logf("sending %d wei to invoice %d with address %s", value, uint64(i.ID.Raw()), invoiceAddressHex)
+	i.t.Logf("sending %d wei to invoice#%d with address %s", value, uint64(i.ID.Raw()), invoiceAddressHex)
 
 	return &TestTransaction{
 		t:           i.t,
@@ -88,8 +87,6 @@ func getInvoice(t *testing.T, e *httpexpect.Expect, invoiceID uint64) *TestInvoi
 		Status(http.StatusOK).
 		JSON().Object()
 
-	TLogJSON(t, invoice.Raw())
-
 	return &TestInvoice{
 		t: t,
 
@@ -99,12 +96,4 @@ func getInvoice(t *testing.T, e *httpexpect.Expect, invoiceID uint64) *TestInvoi
 		Address: invoice.Value("address").String(),
 		Status:  invoice.Value("status").String(),
 	}
-}
-
-func TLogJSON(t *testing.T, v JSON) {
-	t.Helper()
-
-	res, err := json.MarshalIndent(v, "", "  ")
-	require.NoError(t, err)
-	t.Logf("%s", res)
 }

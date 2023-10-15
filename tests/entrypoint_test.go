@@ -24,7 +24,15 @@ func (s *TestSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 
 	s.e = func() *httpexpect.Expect {
-		return httpexpect.New(s.T(), app.URI)
+		t := s.T()
+
+		return httpexpect.WithConfig(httpexpect.Config{
+			BaseURL:  app.URI,
+			Reporter: httpexpect.NewRequireReporter(t),
+			Printers: []httpexpect.Printer{
+				httpexpect.NewDebugPrinter(t, true),
+			},
+		})
 	}
 	s.eth = app.testAccount
 	s.tearDownSuite = func(t *testing.T) {
