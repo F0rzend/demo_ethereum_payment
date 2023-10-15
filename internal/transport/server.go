@@ -50,17 +50,21 @@ func (s *HTTPServer) Run() error {
 	return nil
 }
 
+// ShutdownOnContextDone returns a child context and a function that will shut the server down
+// when the signalContext is done.
+// After the server is shutdown, the child context will be canceled.
+// Use child context to run goroutines that should be stopped when the server is shutdown.
 func (s *HTTPServer) ShutdownOnContextDone(
 	signalContext context.Context,
 ) (context.Context, common.ErrorGroupGoroutine) {
-	shutdownContext, cancel := context.WithCancel(context.Background())
+	childContext, cancelChildContexts := context.WithCancel(context.Background())
 
-	return shutdownContext, func() error {
-		defer cancel()
+	return childContext, func() error {
+		defer cancelChildContexts()
 
 		<-signalContext.Done()
 
-		ctx, cancel := context.WithTimeout(shutdownContext, ServerShutdownTimeout)
+		ctx, cancel := context.WithTimeout(childContext, ServerShutdownTimeout)
 		defer cancel()
 
 		if err := s.server.Shutdown(ctx); err != nil {
